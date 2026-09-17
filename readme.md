@@ -1,211 +1,53 @@
-# 📄 AI Document Assistant
+# 📄 AI Document Assistant (Advanced)
 
-A simple Streamlit RAG-style document assistant that supports:
+A Streamlit app that answers questions about your PDF, DOCX, TXT, and MD files using hybrid (semantic + keyword) search and Groq for generation. Upload files directly or pull them in from a public Google Drive link.
 
-- PDF
-- DOCX
-- TXT
-- Markdown (`.md`)
-- Public Google Drive file/folder links
-- Text extraction
-- Overlapping text chunking
-- Sentence Transformers embeddings
-- FAISS semantic search
-- Keyword search
-- Hybrid search
-- Groq question answering
-- Retrieved source display
-- Streamlit session-state caching so document embeddings are not recreated for every question
+## What's new in this version
 
-## 1. Project files
+**Bugs fixed:**
+- **FAISS crash on every question.** The old code serialized embeddings to raw bytes and tried to reshape them with `.shape[1]` on a 1‑D array — this always threw `IndexError` when you asked a question. Fixed by keeping the FAISS index as a live object in `st.session_state` instead of round‑tripping through bytes.
+- **Google Drive single-file links failing / "no supported files" error.** The old code downloaded single files to a filename with no extension, so the `.pdf/.docx/.txt/.md` filter always rejected them. Fixed by letting `gdown` resolve the real filename (with the correct extension) itself, plus clearer error messages (private link, empty folder, bad URL, etc.) and support for more Drive link formats (`/file/d/…`, `?id=…`, `/folders/…`).
+- **One bad file killing the whole batch.** Extraction is now wrapped per-file, so a corrupt or password-protected PDF just gets flagged with a status instead of crashing the app.
+- **Scanned/image-only PDFs failing silently.** These are now detected and reported clearly (OCR isn't supported, so text-based PDFs are required).
 
-```text
-ai-document-assistant/
-├── app.py
-├── requirements.txt
-└── readme.md
-```
+**New / upgraded UI:**
+- Polished, card-based layout with a gradient header and live metrics (documents, chunks, characters, success rate).
+- Two tabs: **Documents** (upload status per file, with per-file error/warning messages) and **Chat** (a real chat interface using `st.chat_message` / `st.chat_input`).
+- Chat history persists during the session, with relevance-score bars per retrieved source and a **transcript export** button.
+- Sidebar **Advanced settings**: choice of embedding model (fast vs. more accurate), choice of Groq model (or type a custom model id), temperature, chunk size/overlap, and number of sources.
+- One-click **Clear everything** to reset the session.
 
-## 2. Install
+## Setup
 
-Use Python 3.10 or newer.
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Add your Groq API key to Streamlit Secrets (`.streamlit/secrets.toml`):
+   ```toml
+   GROQ_API_KEY = "gsk_..."
+   ```
+   (An environment variable `GROQ_API_KEY` also works as a fallback.)
+3. Run the app:
+   ```bash
+   streamlit run app.py
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+## Using Google Drive
 
-## 3. Add the Groq API key
+- **Single file:** share it so "Anyone with the link" can view, then paste the link (`.../file/d/FILE_ID/view` or `?id=FILE_ID`).
+- **Folder:** share the folder the same way, then paste the folder link (`.../drive/folders/FOLDER_ID`). All supported files inside are downloaded.
+- Private files/folders (restricted to specific accounts) can't be accessed this way — for those you'd need a Drive API integration with OAuth/service-account credentials, which is out of scope for this simple app.
 
-Do **not** put the API key inside `app.py`.
+## How it works
 
-For local Streamlit, create:
+1. **Extract** text from each uploaded/downloaded file (per-page for PDFs, including tables for DOCX).
+2. **Chunk** the text into overlapping segments, keeping filename/page metadata.
+3. **Embed** each chunk with a Sentence Transformers model and index it in FAISS (built once per "Process documents" click — not recreated per question).
+4. **Search**: each question is embedded and matched against the index (semantic score), combined with a simple keyword-overlap score (70% semantic / 30% keyword).
+5. **Answer**: the top matching chunks are sent to Groq as context, with instructions to answer only from that context.
 
-```text
-.streamlit/secrets.toml
-```
+## Notes
 
-Put this inside:
-
-```toml
-GROQ_API_KEY = "your_groq_api_key_here"
-```
-
-You can also configure the same secret in Streamlit Community Cloud under the app's Secrets settings.
-
-The app reads:
-
-```python
-st.secrets["GROQ_API_KEY"]
-```
-
-and never hardcodes the key.
-
-## 4. Run
-
-```bash
-streamlit run app.py
-```
-
-## 5. How the pipeline works
-
-```text
-PDF / DOCX / TXT / MD / Google Drive
-                ↓
-          Text extraction
-                ↓
-       Overlapping chunks
-                ↓
- Sentence Transformers embeddings
-                ↓
-          FAISS index
-                ↓
-       User's question
-          ↙          ↘
-   Semantic search   Keyword search
-          ↘          ↙
-          Hybrid ranking
-                ↓
-        Top relevant chunks
-                ↓
-       Groq LLM + context
-                ↓
-             Answer
-                ↓
-        Retrieved sources
-```
-
-## 6. Important design choice: embeddings are created once
-
-When you click **Process documents**, the app:
-
-1. Extracts the text.
-2. Creates overlapping chunks.
-3. Creates embeddings for all chunks.
-4. Stores the embeddings and chunk metadata in `st.session_state`.
-
-When you ask another question, the app does **not** recreate document embeddings.
-
-It only:
-
-1. Embeds the new question.
-2. Searches the stored document vectors.
-3. Runs keyword matching.
-4. Combines both scores.
-5. Sends the retrieved chunks to Groq.
-
-The FAISS index is rebuilt from the already-stored embedding array when needed; the expensive document embedding step is not repeated.
-
-## 7. Hybrid search
-
-The app combines:
-
-```text
-Hybrid score = 0.70 × semantic score + 0.30 × keyword score
-```
-
-Semantic search finds chunks with similar meaning.
-
-Keyword search checks whether important words from the question occur in the chunk.
-
-The important-word extraction is intentionally simple and uses a small stop-word list, so the project remains easy to explain.
-
-## 8. Metadata
-
-Every chunk keeps:
-
-```python
-{
-    "text": "...",
-    "filename": "...",
-    "page": 1
-}
-```
-
-PDF chunks preserve the PDF page number.
-
-DOCX, TXT and MD files do not have a reliable page concept at extraction time, so their page value is `None`.
-
-## 9. Google Drive
-
-Paste a **publicly accessible** Google Drive file or folder link into the sidebar.
-
-The app uses `gdown` to download supported files and sends them through the same pipeline:
-
-```text
-Google Drive
-→ extraction
-→ chunking
-→ embeddings
-→ FAISS
-→ hybrid search
-→ Groq
-```
-
-Local file upload continues to work at the same time.
-
-For private Google Drive content, a proper Google Drive API/OAuth integration is required. This simple version intentionally avoids adding OAuth complexity.
-
-## 10. Groq answer behavior
-
-The model is instructed to answer only from retrieved context.
-
-If the context does not contain the answer, it should say:
-
-> The information is not available in the provided documents.
-
-The app also displays the retrieved chunks underneath every answer so you can inspect the evidence used by the RAG pipeline.
-
-## 11. First run
-
-The first use of Sentence Transformers may download the embedding model:
-
-```text
-all-MiniLM-L6-v2
-```
-
-After it is available locally, later runs can reuse the cached model.
-
-## 12. Streamlit deployment
-
-For Streamlit Community Cloud:
-
-1. Push `app.py`, `requirements.txt`, and `readme.md` to GitHub.
-2. Create a Streamlit app from the repository.
-3. Open the app's **Secrets** settings.
-4. Add:
-
-```toml
-GROQ_API_KEY = "your_groq_api_key_here"
-```
-
-5. Deploy.
-
-Do not commit `.streamlit/secrets.toml` to GitHub.
-
-A useful `.gitignore` entry is:
-
-```text
-.streamlit/secrets.toml
-__pycache__/
-*.pyc
-```
+- Larger Drive folders / many large PDFs will take longer on the "Process documents" step — this is expected (embeddings are computed once, not per question).
+- Only the retrieved chunks (not entire documents) are sent to Groq for each answer.
