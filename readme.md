@@ -4,7 +4,11 @@ A Streamlit app that answers questions about your PDF, DOCX, TXT, and MD files u
 
 ## What's new in this version
 
-**Bugs fixed:**
+**Bugs fixed (round 2):**
+- **`gdown.download() got an unexpected keyword argument 'fuzzy'`.** Newer `gdown` releases dropped the old `fuzzy` parameter. Fixed by dropping it (we already resolve the Drive file ID ourselves via regex, so it was never needed) and added a `TypeError` fallback for older `gdown` versions that expect a full `url=` instead of `id=`.
+- **`Groq request failed: ... model llama-3.3-70b-versatile does not exist`.** Groq decommissioned `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` on June 17, 2026. The model dropdown now defaults to Groq's current recommended models: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, and `qwen/qwen3.6-27b`. If Groq changes their lineup again, you can always type any model id directly into the "custom Groq model id" box in Advanced settings.
+
+**Bugs fixed (round 1):**
 - **FAISS crash on every question.** The old code serialized embeddings to raw bytes and tried to reshape them with `.shape[1]` on a 1‑D array — this always threw `IndexError` when you asked a question. Fixed by keeping the FAISS index as a live object in `st.session_state` instead of round‑tripping through bytes.
 - **Google Drive single-file links failing / "no supported files" error.** The old code downloaded single files to a filename with no extension, so the `.pdf/.docx/.txt/.md` filter always rejected them. Fixed by letting `gdown` resolve the real filename (with the correct extension) itself, plus clearer error messages (private link, empty folder, bad URL, etc.) and support for more Drive link formats (`/file/d/…`, `?id=…`, `/folders/…`).
 - **One bad file killing the whole batch.** Extraction is now wrapped per-file, so a corrupt or password-protected PDF just gets flagged with a status instead of crashing the app.
