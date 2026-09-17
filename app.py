@@ -1,10 +1,4 @@
-from pathlib import Path
-import zipfile, textwrap
-
-base = Path("/mnt/data/ai_document_assistant")
-base.mkdir(exist_ok=True)
-
-app_py = r'''import io
+import io
 import os
 import re
 import shutil
@@ -566,41 +560,3 @@ st.caption(
     "Privacy note: document text is processed by this app. "
     "Only the retrieved chunks are sent to Groq for question answering."
 )
-'''
-
-requirements = r'''streamlit
-pypdf
-python-docx
-sentence-transformers
-faiss-cpu
-numpy
-groq
-gdown
-'''
-
-readme = r'''# 📄 AI Document Assistant
-
-A simple Streamlit RAG-style document assistant that supports:
-
-- PDF
-- DOCX
-- TXT
-- Markdown (`.md`)
-- Public Google Drive file/folder links
-- Text extraction
-- Overlapping text chunking
-- Sentence Transformers embeddings
-- FAISS semantic search
-- Keyword search
-- Hybrid search
-- Groq question answering
-- Retrieved source display
-- Streamlit session-state caching so document embeddings are not recreated for every question
-
-## 1. Project files
-
-```text
-ai-document-assistant/
-├── app.py
-├── requirements.txt
-└── readme.md
