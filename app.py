@@ -95,11 +95,9 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 BADGE_CLASS = {".pdf": "badge-pdf", ".docx": "badge-docx", ".txt": "badge-txt", ".md": "badge-md"}
 
 GROQ_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "qwen/qwen3-32b",
+    "qwen/qwen3.6-27b",
 ]
 
 EMBEDDING_MODELS = {
@@ -354,7 +352,16 @@ def load_from_google_drive(url):
             try:
                 # Trailing separator tells gdown to treat this as a directory and
                 # infer the real filename (with correct extension) itself.
-                out = gdown.download(id=drive_id, output=temp_dir + os.sep, quiet=True, fuzzy=True)
+                # (Note: newer gdown versions dropped the old `fuzzy` kwarg —
+                # passing a resolved `id` directly works across versions.)
+                out = gdown.download(id=drive_id, output=temp_dir + os.sep, quiet=True)
+            except TypeError:
+                # Older gdown versions require a full URL rather than `id=`.
+                out = gdown.download(
+                    url=f"https://drive.google.com/uc?id={drive_id}",
+                    output=temp_dir + os.sep,
+                    quiet=True,
+                )
             except Exception as exc:
                 raise RuntimeError(f"Couldn't download the Drive file. ({exc})") from exc
 
